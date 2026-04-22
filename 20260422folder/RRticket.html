@@ -113,7 +113,7 @@
 
         // 正規表達式邏輯：匹配「客戶維修單號:」後方的非空白字元
         // 支援格式如 PA760-RR2602230055 或 TC200-RR2603110052
-        const regex = /客戶維修單號\s*[:：]\s*([A-Z0-9-]{5,25})/i;
+        const regex = /客戶維修單號\s*[:：]\s*(.+?)(?=\s{2,}|$)/i;
         const match = fullText.match(regex);
         
         return match ? match[1] : null;
