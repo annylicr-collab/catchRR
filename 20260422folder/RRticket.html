@@ -96,28 +96,68 @@
         downloadBtn.disabled = false;
     });
 
-    async function extractSerialNumber(file) {
-        const arrayBuffer = await file.arrayBuffer();
-        const pdf = await pdfjsLib.getDocument(arrayBuffer).promise;
-        let fullText = "";
+async function extractSerialNumber(file) {
+    const arrayBuffer = await file.arrayBuffer();
+    const pdf = await pdfjsLib.getDocument(arrayBuffer).promise;
 
-        // 通常單號在第一頁，為保險起見掃描前兩頁
-        const pagesToScan = Math.min(pdf.numPages, 2);
-        
-        for (let i = 1; i <= pagesToScan; i++) {
-            const page = await pdf.getPage(i);
-            const textContent = await page.getTextContent();
-            const pageText = textContent.items.map(item => item.str).join(" ");
-            fullText += pageText;
-        }
+    let fullText = "";
 
-        // 正規表達式邏輯：匹配「客戶維修單號:」後方的非空白字元
-        // 支援格式如 PA760-RR2602230055 或 TC200-RR2603110052
-        const regex = /客戶維修單號\s*[:：]\s*(.+?)(?=\s{2,}|$)/i;
-        const match = fullText.match(regex);
-        
-        return match ? match[1] : null;
+    // 掃前3頁，避免單號跑到後頁
+    const pagesToScan = Math.min(pdf.numPages, 3);
+
+    for (let i = 1; i <= pagesToScan; i++) {
+        const page = await pdf.getPage(i);
+        const textContent = await page.getTextContent();
+
+        const pageText = textContent.items.map(item => item.str).join(" ");
+        fullText += pageText + "\n";
     }
+
+    // 清理 PDF 常見亂碼空白
+    fullText = fullText
+        .replace(/\s+/g, ' ')
+        .replace(/：/g, ':')
+        .trim();
+
+    /*
+    終極版抓法（依優先順序）
+
+    1. 客戶維修單號附近抓 RR號
+    2. SR單號附近抓 RR號
+    3. 全文抓 RR號
+    4. 抓 RMA / 維修格式
+    */
+
+    const patterns = [
+
+        // 客戶維修單號：TSC XXX-RR2603180068
+        /客戶維修單號\s*:?\s*.*?(RR\d{8,})/i,
+
+        // 維修單號：RR2603180068
+        /維修單號\s*:?\s*(RR\d{8,})/i,
+
+        // 單號：RR2603180068
+        /單號\s*:?\s*(RR\d{8,})/i,
+
+        // 任意位置 RR號（最泛用）
+        /\b(RR\d{8,})\b/i,
+
+        // 若有 RMA2603180068
+        /\b(RMA\d{6,})\b/i,
+
+        // 若有 REP2603180068
+        /\b(REP\d{6,})\b/i
+    ];
+
+    for (const regex of patterns) {
+        const match = fullText.match(regex);
+        if (match) {
+            return match[1] || match[0];
+        }
+    }
+
+    return null;
+}
 
     // 複製功能
     copyBtn.addEventListener('click', () => {
